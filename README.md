@@ -1,11 +1,3 @@
-Ha, noted — and my apologies to Canonical. Resolute Raccoon is real and I should have known better.
-
-The "no npm on the host" constraint is completely achievable and is actually the *correct* Docker pattern — npm only runs inside the container build, never on your Ubuntu machine or Windows PC directly. The container image bakes in all the Node dependencies at build time, so from the Ubuntu machine's perspective it's just `git pull && docker compose up -d`. Clean.
-
-Here's the full picture of what gets built, how it's structured on disk, and the exact workflow.
-
----
-
 ## What gets built — the complete picture
 
 The app has three logical parts that live together in one repository:
