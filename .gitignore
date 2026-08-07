@@ -1,0 +1,21 @@
+# Dependencies — never commit these; they live inside the Docker image
+node_modules/
+
+# Environment — contains secrets, never commit
+.env
+
+# Data directory — contains the database and uploaded files
+# This should live on the host, not in the repository
+data/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artefacts
+*.log

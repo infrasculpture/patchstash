@@ -1,0 +1,21 @@
+services:
+  patchstash:
+    build: .
+    # To use a pre-built image from a registry instead of building locally:
+    # image: ghcr.io/yourname/patchstash:latest
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      # Host path on the left, container path on the right.
+      # Change the left side to wherever you want data stored on the host.
+      - ${DATA_DIR:-./data}:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped
+    # Healthcheck: Docker will restart the container if the server stops responding
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/auth"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
