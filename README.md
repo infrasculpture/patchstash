@@ -162,10 +162,3 @@ That's the entire update process. The data directory is untouched.
 tar czf patchstash-backup-$(date +%Y%m%d).tar.gz ~/patchstash-data/
 ```
 
----
-
-## One remaining question before we start building
-
-The frontend is a single `index.html` + `app.js` + `style.css`. Given the app has six distinct screens (login, project switcher, project view, element detail/create, export, layer management), `app.js` will be the largest single file — probably 800–1000 lines of vanilla JS handling client-side routing between views, all the API calls, and DOM rendering. That's well within the pattern established by Palette Arsenal, but I want to confirm you're comfortable with that approach versus splitting the JS across multiple files. Multiple files is slightly cleaner for maintenance but complicates the serving slightly (more static files to track). Single file matches the toolkit's existing conventions exactly.
-
-Also — do you want to start with Phase 1 (container scaffold) right now, or are there any other design questions you want settled first?
