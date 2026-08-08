@@ -4,130 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Patch Stash</title>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: system-ui, -apple-system, sans-serif;
-    background: #f8f7f4;
-    color: #1a1a1a;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-  }
-  .card {
-    background: #fff;
-    border: 1px solid #e5e3df;
-    border-radius: 8px;
-    padding: 2.5rem;
-    max-width: 420px;
-    width: 100%;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-    text-align: center;
-  }
-  h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 0.5rem; }
-  .sub { color: #777; font-size: 0.9rem; margin-bottom: 2rem; }
-  .status { font-size: 0.85rem; color: #555; line-height: 1.8; }
-  .status span { font-family: 'Courier New', monospace; background: #f0ede8; padding: 1px 6px; border-radius: 3px; }
-  .ok  { color: #2a7a2a; font-weight: 600; }
-  .err { color: #b00; font-weight: 600; }
-  form { margin-top: 2rem; text-align: left; }
-  label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; color: #444; }
-  input[type=password] {
-    width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #d0cdc8;
-    border-radius: 6px; font-size: 1rem; margin-bottom: 1rem; outline: none;
-    background: #faf9f7;
-  }
-  input[type=password]:focus { border-color: #3b6fd4; box-shadow: 0 0 0 3px rgba(59,111,212,0.12); }
-  button {
-    width: 100%; padding: 0.65rem; background: #3b6fd4; color: #fff;
-    border: none; border-radius: 6px; font-size: 1rem; font-weight: 600;
-    cursor: pointer; transition: background 0.15s;
-  }
-  button:hover { background: #2d57b8; }
-  .msg { font-size: 0.85rem; margin-top: 0.75rem; min-height: 1.2em; }
-  .msg.err { color: #b00; }
-</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<div class="card" id="card">
-  <h1>Patch Stash</h1>
-  <p class="sub">Phase 1 scaffold — server is running</p>
-  <div class="status" id="status">Checking server…</div>
+<div id="root">
+  <!-- Boot state: shown briefly while app.js checks auth.
+       Replaced immediately by either the login screen or the app shell. -->
+  <div class="login-wrap">
+    <div class="login-card" style="text-align:center">
+      <h1 style="margin-bottom:0.5rem">Patch<span style="color:#3b6fd4">Stash</span></h1>
+      <p style="color:#777;font-size:0.875rem">Loading…</p>
+    </div>
+  </div>
 </div>
-
-<script>
-(async () => {
-  const statusEl = document.getElementById('status');
-  const card = document.getElementById('card');
-
-  let authRes;
-  try {
-    authRes = await fetch('/api/auth').then(r => r.json());
-  } catch (e) {
-    statusEl.innerHTML = '<span class="err">Could not reach server API.</span>';
-    return;
-  }
-
-  if (!authRes.authEnabled) {
-    statusEl.innerHTML = `
-      <span class="ok">✓ Server running</span><br>
-      Auth: <span>disabled</span> (no AUTH_PASSWORD set)<br>
-      Database: <span>connected</span><br><br>
-      Phase 1 complete. UI coming in Phase 3.
-    `;
-    return;
-  }
-
-  if (authRes.authenticated) {
-    statusEl.innerHTML = `
-      <span class="ok">✓ Server running</span><br>
-      Auth: <span>enabled + authenticated</span><br>
-      Database: <span>connected</span><br><br>
-      Phase 1 complete. UI coming in Phase 3.
-    `;
-    return;
-  }
-
-  // Show login form
-  card.innerHTML = `
-    <h1>Patch Stash</h1>
-    <p class="sub">Enter the shared password to continue</p>
-    <form id="login-form">
-      <label for="pw">Password</label>
-      <input type="password" id="pw" name="password" autocomplete="current-password" autofocus>
-      <button type="submit">Sign in</button>
-      <div class="msg" id="login-msg"></div>
-    </form>
-  `;
-
-  document.getElementById('login-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const msg = document.getElementById('login-msg');
-    const pw  = document.getElementById('pw').value;
-    msg.textContent = '';
-    msg.className = 'msg';
-
-    try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        location.reload();
-      } else {
-        msg.textContent = data.error || 'Incorrect password.';
-        msg.className = 'msg err';
-      }
-    } catch (_) {
-      msg.textContent = 'Could not reach server.';
-      msg.className = 'msg err';
-    }
-  });
-})();
-</script>
+<script src="/app.js"></script>
 </body>
 </html>

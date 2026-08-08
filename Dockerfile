@@ -28,4 +28,9 @@ RUN mkdir -p /app/data/files
 
 EXPOSE 3000
 
+# Run as non-root for basic security hygiene
+RUN addgroup -S patchstash && adduser -S patchstash -G patchstash
+RUN chown -R patchstash:patchstash /app
+USER patchstash
+
 CMD ["node", "server/index.js"]
