@@ -839,6 +839,7 @@ async function viewProject(queryParams, routeParams) {
         </div>
         <div class="page-header-actions">
           <button class="btn btn-ghost btn-sm" onclick="openEditProjectModal('${esc(id)}')">Edit project</button>
+          <button class="btn btn-secondary btn-sm" onclick="router.navigate('/projects/${esc(id)}/export')">↓ Export to Palette Arsenal</button>
           <button class="btn btn-primary" onclick="router.navigate('/projects/${esc(id)}/elements/new')">+ Add element</button>
         </div>
       </div>
@@ -1575,14 +1576,284 @@ async function confirmDeleteElement(id, projectId) {
 //  ROUTER REGISTRATION
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//  EXPORT VIEW  — select elements, map custom layers, download PA JSON
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const PA_LAYERS = ['foundation', 'movement', 'texture', 'punctuation', 'psychedelic'];
+const PA_LAYER_LABELS = {
+  foundation:  'Foundation',
+  movement:    'Movement',
+  texture:     'Texture',
+  punctuation: 'Punctuation',
+  psychedelic: 'Psychedelic Detail',
+};
+
+// Selected element IDs for export — module-level so the mapping step can read them
+let _exportSelectedIds = new Set();
+
+async function viewExport(queryParams, routeParams) {
+  const { id: projectId } = routeParams;
+
+  const { data: project, error: pErr } = await api.getProject(projectId);
+  if (pErr) { toast.error('Project not found.'); router.navigate('/projects', true); return; }
+
+  state.currentProject = project;
+  updateTopnav();
+
+  // Load all elements for this project — filter to exportable statuses
+  const { data: allElements, error: eErr } = await api.elements(projectId);
+  if (eErr) { toast.error(eErr); return; }
+
+  const exportable = allElements.filter(el =>
+    el.status === 'selected' || el.status === 'imported'
+  );
+  const other = allElements.filter(el =>
+    el.status !== 'selected' && el.status !== 'imported'
+  );
+
+  // Pre-select all exportable elements
+  _exportSelectedIds = new Set(exportable.map(el => el.id));
+
+  setApp(`
+    <div class="page-header">
+      <div class="page-header-left">
+        <h1 class="page-title">Export to Palette Arsenal</h1>
+        <p class="page-sub">from <strong>${esc(project.name)}</strong></p>
+      </div>
+      <div class="page-header-actions">
+        <button class="btn btn-ghost btn-sm" onclick="router.navigate('/projects/${esc(projectId)}')">← Back</button>
+      </div>
+    </div>
+
+    <div class="export-layout">
+
+      <!-- Element selection -->
+      <div class="card" style="margin-bottom:1rem">
+        <div class="card-body">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.9rem;flex-wrap:wrap;gap:0.5rem">
+            <div>
+              <div class="label" style="margin-bottom:0.2rem">Select elements to export</div>
+              <p class="hint">Only <strong>Selected</strong> and <strong>Imported</strong> elements are shown. Change an element's status to include it.</p>
+            </div>
+            <div style="display:flex;gap:0.5rem">
+              <button class="btn btn-ghost btn-sm" onclick="exportSelectAll(true)">Select all</button>
+              <button class="btn btn-ghost btn-sm" onclick="exportSelectAll(false)">Deselect all</button>
+            </div>
+          </div>
+
+          ${exportable.length ? `
+          <div class="export-element-list" id="export-element-list">
+            ${exportable.map(el => exportElementRowHtml(el)).join('')}
+          </div>` : `
+          <div class="empty-state" style="padding:1.5rem">
+            <p>No elements with status <strong>Selected</strong> or <strong>Imported</strong> in this project.</p>
+            <p class="hint" style="margin-top:0.35rem">Mark elements as Selected or Imported from their detail view, then return here to export.</p>
+          </div>`}
+
+          ${other.length ? `
+          <details style="margin-top:1rem">
+            <summary class="hint" style="cursor:pointer;user-select:none">
+              Show ${other.length} element${other.length !== 1 ? 's' : ''} with other statuses (not exported by default)
+            </summary>
+            <div class="export-element-list" id="export-element-list-other" style="margin-top:0.75rem;opacity:0.65">
+              ${other.map(el => exportElementRowHtml(el)).join('')}
+            </div>
+          </details>` : ''}
+        </div>
+      </div>
+
+      <!-- Export action -->
+      <div class="card">
+        <div class="card-body">
+          <div class="label" style="margin-bottom:0.5rem">Export</div>
+          <p class="hint" style="margin-bottom:1rem">
+            Downloads a <code>.json</code> file shaped to match Palette Arsenal v11's sound schema.
+            Import it into Palette Arsenal using the <strong>Import sounds</strong> button —
+            it appends the sounds into the right layers without touching the rest of your palette.
+          </p>
+          <div id="export-mapping-area"></div>
+          <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;margin-top:1rem">
+            <button class="btn btn-primary" id="export-btn" onclick="runExport('${esc(projectId)}')">
+              ↓ Download Palette Arsenal JSON
+            </button>
+            <span class="hint" id="export-selection-count"></span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  `);
+
+  updateExportCount();
+}
+
+function exportElementRowHtml(el) {
+  const checked = _exportSelectedIds.has(el.id);
+  return `
+    <label class="export-element-row" id="export-row-${esc(el.id)}">
+      <input type="checkbox" ${checked ? 'checked' : ''}
+        onchange="toggleExportElement('${esc(el.id)}', this.checked)">
+      <div class="export-element-info">
+        <span class="export-element-title">${esc(el.title)}</span>
+        <span class="export-element-meta">
+          ${layerBadgeHtml(el.layerId)}
+          ${statusBadgeHtml(el.status)}
+          ${el.synth ? `<span class="meta-tag">${esc(el.synth)}</span>` : ''}
+        </span>
+      </div>
+    </label>`;
+}
+
+function toggleExportElement(id, checked) {
+  if (checked) _exportSelectedIds.add(id);
+  else         _exportSelectedIds.delete(id);
+  updateExportCount();
+}
+
+function exportSelectAll(select) {
+  // Select/deselect all checkboxes currently rendered
+  document.querySelectorAll('.export-element-row input[type=checkbox]').forEach(cb => {
+    cb.checked = select;
+    const row = cb.closest('.export-element-row');
+    if (row) {
+      const id = row.id.replace('export-row-', '');
+      if (select) _exportSelectedIds.add(id);
+      else        _exportSelectedIds.delete(id);
+    }
+  });
+  updateExportCount();
+}
+
+function updateExportCount() {
+  const countEl = document.getElementById('export-selection-count');
+  if (countEl) {
+    const n = _exportSelectedIds.size;
+    countEl.textContent = n
+      ? `${n} element${n !== 1 ? 's' : ''} selected`
+      : 'No elements selected';
+  }
+}
+
+async function runExport(projectId) {
+  const ids = [..._exportSelectedIds];
+  if (!ids.length) { toast.error('No elements selected.'); return; }
+
+  const btn = document.getElementById('export-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+
+  // Pre-flight: check for custom layers that need mapping
+  const { data: check, error: checkErr } = await api.exportCheck(ids);
+  if (checkErr) {
+    toast.error(checkErr);
+    if (btn) { btn.disabled = false; btn.textContent = '↓ Download Palette Arsenal JSON'; }
+    return;
+  }
+
+  if (check.needsMapping) {
+    // Show mapping UI inline, then wait for user to confirm
+    showLayerMappingUI(check.unmappedLayers, ids, projectId);
+    if (btn) { btn.disabled = false; btn.textContent = '↓ Download Palette Arsenal JSON'; }
+    return;
+  }
+
+  // No mapping needed — export directly
+  await doExport(ids, {}, projectId);
+  if (btn) { btn.disabled = false; btn.textContent = '↓ Download Palette Arsenal JSON'; }
+}
+
+function showLayerMappingUI(unmappedLayers, ids, projectId) {
+  const mappingArea = document.getElementById('export-mapping-area');
+  if (!mappingArea) return;
+
+  const paOptions = PA_LAYERS.map(id =>
+    `<option value="${id}">${PA_LAYER_LABELS[id]}</option>`
+  ).join('');
+
+  mappingArea.innerHTML = `
+    <div class="alert alert-info" style="margin-bottom:1rem">
+      Some elements use custom layers. Map each one to a Palette Arsenal layer before exporting.
+    </div>
+    <div class="export-layer-map">
+      ${unmappedLayers.map(l => `
+        <div class="export-layer-map-row">
+          <span class="export-layer-map-from">${esc(l.name)}</span>
+          <span class="export-layer-map-arrow">→</span>
+          <select class="export-layer-map-select" id="layermap-${esc(l.id)}">
+            ${paOptions}
+          </select>
+        </div>`).join('')}
+    </div>
+    <button class="btn btn-primary" style="margin-top:1rem"
+      onclick="confirmMappedExport(${JSON.stringify(unmappedLayers.map(l => l.id))}, ${JSON.stringify(ids)})">
+      ↓ Download with this mapping
+    </button>
+  `;
+}
+
+async function confirmMappedExport(unmappedLayerIds, ids) {
+  const layerMap = {};
+  for (const layerId of unmappedLayerIds) {
+    const sel = document.getElementById(`layermap-${layerId}`);
+    if (sel) layerMap[layerId] = sel.value;
+  }
+  await doExport(ids, layerMap);
+}
+
+async function doExport(ids, layerMap) {
+  const btn = document.getElementById('export-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
+
+  // POST to the export endpoint — response is a JSON file download
+  try {
+    const res = await fetch('/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ elementIds: ids, layerMap }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.error || 'Export failed');
+      return;
+    }
+
+    // Trigger a browser download from the response blob
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+
+    // Use filename from Content-Disposition header if present, otherwise generate one
+    const cd       = res.headers.get('Content-Disposition') || '';
+    const match    = cd.match(/filename="([^"]+)"/);
+    a.download     = match ? match[1] : `patchstash-export-${Date.now()}.json`;
+
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast.success(`Exported ${ids.length} element${ids.length !== 1 ? 's' : ''}.`);
+
+    // Clear mapping UI if it was shown
+    const mappingArea = document.getElementById('export-mapping-area');
+    if (mappingArea) mappingArea.innerHTML = '';
+
+  } catch (e) {
+    toast.error('Network error during export.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↓ Download Palette Arsenal JSON'; }
+  }
+}
+
 router.register('/login',                       viewLogin);
 router.register('/layers',                      viewLayers);
 router.register('/projects',                    viewProjects);
 router.register('/projects/:id',                viewProject);
 router.register('/projects/:id/elements/new',   viewNewElement);
+router.register('/projects/:id/export',         viewExport);
 router.register('/elements/:id',                viewElement);
-// Phase 6 will add:
-// router.register('/projects/:id/export',      viewExport);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  BOOTSTRAP
