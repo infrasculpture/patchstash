@@ -1200,7 +1200,7 @@ async function viewElement(queryParams, routeParams) {
         </div>` : ''}
 
         <!-- Audio file -->
-        <div class="card" style="margin-bottom:1rem" id="audio-card">
+        <div class="card" style="margin-bottom:1rem">
           <div class="card-body">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
               <div class="label">Audio preview</div>
@@ -1209,20 +1209,26 @@ async function viewElement(queryParams, routeParams) {
                 : ''}
             </div>
             ${el.audioFile
-              ? `<audio controls style="width:100%;margin-bottom:0.5rem" src="${api.fileUrl(id,'audio')}"></audio>
-                 <div class="file-info mono">${esc(el.audioFile.filename.replace(/^audio_/,''))} · ${fmtSize(el.audioFile.sizeBytes)}</div>`
+              ? `<audio controls style="width:100%;margin-bottom:0.5rem"
+                   src="${api.fileUrl(id,'audio')}"
+                   preload="metadata">
+                   Your browser does not support the audio element.
+                 </audio>
+                 <div class="file-info mono">${esc(el.audioFile.filename.replace(/^audio_/,''))} · ${fmtSize(el.audioFile.sizeBytes)}
+                   <a href="${api.fileUrl(id,'audio')}" download style="margin-left:0.75rem;font-size:0.78rem">↓ Download</a>
+                 </div>`
               : `<div class="file-upload-area" id="audio-upload-area">
-                   <p class="hint" style="margin-bottom:0.75rem">No audio preview attached yet.</p>
+                   <p class="hint" style="margin-bottom:0.75rem">No audio preview attached yet. Adding one lets collaborators assess the element without opening a DAW.</p>
                    <label class="btn btn-secondary btn-sm" style="cursor:pointer">
-                     Upload audio
-                     <input type="file" accept="audio/*" style="display:none" onchange="uploadFile('${esc(id)}','audio',this)">
+                     ♪ Upload audio preview
+                     <input type="file" accept="audio/*,.wav,.mp3,.aif,.aiff,.flac,.ogg,.m4a" style="display:none" onchange="uploadFile('${esc(id)}','audio',this)">
                    </label>
                  </div>`}
           </div>
         </div>
 
         <!-- Primary file -->
-        <div class="card" style="margin-bottom:1rem" id="primary-card">
+        <div class="card" style="margin-bottom:1rem">
           <div class="card-body">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
               <div class="label">Primary file</div>
@@ -1233,21 +1239,28 @@ async function viewElement(queryParams, routeParams) {
             ${el.primaryFile
               ? `<div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
                    <a class="btn btn-primary btn-sm" href="${api.fileUrl(id,'primary')}" download>↓ Download</a>
-                   <span class="file-info mono">${esc(el.primaryFile.filename.replace(/^primary_/,''))} · ${fmtSize(el.primaryFile.sizeBytes)}</span>
-                 </div>`
-              : `<div class="file-upload-area">
-                   <p class="hint" style="margin-bottom:0.5rem">No file attached yet.</p>
-                   <p class="hint" style="margin-bottom:0.75rem;font-size:0.78rem">Multiple files? <strong>Zip them first</strong> and upload the archive.</p>
+                   <span class="file-info mono">
+                     ${esc(el.primaryFile.filename.replace(/^primary_/,''))}
+                     · ${fmtSize(el.primaryFile.sizeBytes)}
+                     ${el.primaryFile.type && el.primaryFile.type !== 'other' ? `· <span style="color:var(--t3)">${esc(el.primaryFile.type)}</span>` : ''}
+                   </span>
+                 </div>
+                 <p class="hint" style="margin-top:0.6rem">Uploaded ${fmtDate(el.primaryFile.uploadedAt)}</p>`
+              : `<div class="file-upload-area" id="primary-upload-area">
+                   <p class="hint" style="margin-bottom:0.4rem">No file attached yet.</p>
+                   <p class="hint" style="margin-bottom:0.85rem;font-size:0.78rem">
+                     Attaching multiple files? <strong>Zip them first</strong> and upload the archive.
+                   </p>
                    <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
-                     <select id="primary-type-select" style="font-size:0.8rem;padding:0.35rem 0.5rem;width:auto">
-                       <option value="other">Other</option>
+                     <select id="primary-type-select" style="font-size:0.82rem;padding:0.4rem 0.6rem;width:auto;border:1px solid var(--border2);border-radius:4px;background:var(--surface);color:var(--t1)">
                        <option value="synth-patch">Synth patch</option>
                        <option value="fx-chain">FX chain</option>
                        <option value="daw-project">DAW project</option>
-                       <option value="archive">Archive (.zip/.7z)</option>
+                       <option value="archive">Archive (.zip / .7z)</option>
+                       <option value="other">Other</option>
                      </select>
                      <label class="btn btn-secondary btn-sm" style="cursor:pointer">
-                       Upload file
+                       ⊙ Upload file
                        <input type="file" style="display:none" onchange="uploadFile('${esc(id)}','primary',this)">
                      </label>
                    </div>
@@ -1366,23 +1379,69 @@ async function uploadFile(elementId, slot, input) {
   const file = input.files[0];
   if (!file) return;
 
-  const form = new FormData();
-  form.append('file', file);
-  if (slot === 'primary') {
-    const typeEl = document.getElementById('primary-type-select');
-    form.append('type', typeEl ? typeEl.value : 'other');
+  // Show progress state in the upload area
+  const areaId  = slot === 'audio' ? 'audio-upload-area' : 'primary-upload-area';
+  const areaEl  = document.getElementById(areaId);
+  if (areaEl) {
+    areaEl.innerHTML = `
+      <div class="upload-progress">
+        <div class="upload-progress-bar" id="upload-progress-bar"></div>
+      </div>
+      <p class="hint" style="margin-top:0.5rem" id="upload-progress-label">Uploading <strong>${esc(file.name)}</strong>…</p>
+    `;
   }
 
-  toast.show(`Uploading ${file.name}…`);
-  const { error } = await api.uploadFile(elementId, slot, form);
-  if (error) { toast.error(error); return; }
+  // Use XMLHttpRequest so we can show real upload progress
+  const result = await new Promise((resolve) => {
+    const form = new FormData();
+    form.append('file', file);
+    if (slot === 'primary') {
+      const typeEl = document.getElementById('primary-type-select');
+      form.append('type', typeEl ? typeEl.value : 'other');
+    }
 
-  toast.success('File uploaded.');
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/elements/${elementId}/files/${slot}`);
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (!e.lengthComputable) return;
+      const pct = Math.round((e.loaded / e.total) * 100);
+      const bar = document.getElementById('upload-progress-bar');
+      const lbl = document.getElementById('upload-progress-label');
+      if (bar) bar.style.width = pct + '%';
+      if (lbl) lbl.innerHTML = `Uploading <strong>${esc(file.name)}</strong>… ${pct}%`;
+    });
+
+    xhr.addEventListener('load', () => {
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300) resolve({ data });
+        else resolve({ error: data.error || `Upload failed (${xhr.status})` });
+      } catch (_) {
+        resolve({ error: 'Unexpected server response' });
+      }
+    });
+
+    xhr.addEventListener('error', () => resolve({ error: 'Network error during upload' }));
+    xhr.addEventListener('abort', () => resolve({ error: 'Upload cancelled' }));
+
+    xhr.send(form);
+  });
+
+  if (result.error) {
+    toast.error(result.error);
+    // Reload the view to restore the upload area
+    await viewElement(new URLSearchParams(), { id: elementId });
+    return;
+  }
+
+  toast.success(`${file.name} uploaded.`);
   await viewElement(new URLSearchParams(), { id: elementId });
 }
 
 async function deleteFileSlot(elementId, slot) {
-  if (!confirm(`Remove this ${slot === 'audio' ? 'audio preview' : 'primary file'}? The file will be deleted from disk.`)) return;
+  const label = slot === 'audio' ? 'audio preview' : 'primary file';
+  if (!confirm(`Remove this ${label}? The file will be deleted from disk.`)) return;
   const { error } = await api.deleteFile(elementId, slot);
   if (error) { toast.error(error); return; }
   toast.success('File removed.');

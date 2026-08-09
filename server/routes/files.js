@@ -154,6 +154,25 @@ router.get('/elements/:id/files/:slot', (req, res) => {
   // Strip the slot prefix to get a cleaner download name
   const downloadName = filename.replace(/^(primary|audio)_/, '');
 
+  // Derive a Content-Type from the file extension so browsers can play audio
+  // inline without guessing. Falls back to octet-stream for unknown types.
+  const ext = path.extname(downloadName).toLowerCase();
+  const MIME_TYPES = {
+    '.mp3':  'audio/mpeg',
+    '.wav':  'audio/wav',
+    '.ogg':  'audio/ogg',
+    '.flac': 'audio/flac',
+    '.aac':  'audio/aac',
+    '.m4a':  'audio/mp4',
+    '.aif':  'audio/aiff',
+    '.aiff': 'audio/aiff',
+    '.zip':  'application/zip',
+    '.7z':   'application/x-7z-compressed',
+    '.pdf':  'application/pdf',
+  };
+  const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+  res.setHeader('Content-Type', contentType);
+
   if (slot === 'audio') {
     res.setHeader('Content-Disposition', `inline; filename="${downloadName}"`);
   } else {

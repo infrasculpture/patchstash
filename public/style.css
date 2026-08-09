@@ -875,6 +875,22 @@ input[type=color] {
   background: var(--surface2);
 }
 
+/* Upload progress bar */
+.upload-progress {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.4rem;
+}
+.upload-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.15s ease;
+}
+
 /* ── Status log ──────────────────────────────────────────────────────────── */
 .log-entry {
   padding: 0.75rem 0;
