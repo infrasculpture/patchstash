@@ -6,99 +6,94 @@ const { getDb } = require('../db');
 
 const router = express.Router();
 
+function formatProject(row) {
+  return {
+    ...row,
+    flavours:       JSON.parse(row.flavours || '[]'),
+    archived:       !!row.archived,
+    coverElementId: row.cover_element_id || '',
+  };
+}
+
 // ── GET /api/projects ─────────────────────────────────────────────────────────
-// Returns active projects by default. Pass ?archived=1 to include archived ones.
 router.get('/', (req, res) => {
   const db = getDb();
   const includeArchived = req.query.archived === '1';
   const rows = includeArchived
     ? db.prepare('SELECT * FROM projects ORDER BY created_at DESC').all()
     : db.prepare('SELECT * FROM projects WHERE archived = 0 ORDER BY created_at DESC').all();
-
-  // flavours is stored as a JSON string — parse it for the response
-  const projects = rows.map(p => ({
-    ...p,
-    flavours: JSON.parse(p.flavours || '[]'),
-    archived: !!p.archived,
-  }));
-  res.json(projects);
+  res.json(rows.map(formatProject));
 });
 
 // ── GET /api/projects/:id ─────────────────────────────────────────────────────
 router.get('/:id', (req, res) => {
-  const db = getDb();
+  const db  = getDb();
   const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Project not found' });
-  res.json({ ...row, flavours: JSON.parse(row.flavours || '[]'), archived: !!row.archived });
+  res.json(formatProject(row));
 });
 
 // ── POST /api/projects ────────────────────────────────────────────────────────
 router.post('/', (req, res) => {
   const { name, bpm, key, flavours, description } = req.body || {};
-  if (!name || !name.trim()) {
-    return res.status(400).json({ error: 'name is required' });
-  }
+  if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
+
   const db  = getDb();
   const id  = uuidv4();
   const now = new Date().toISOString();
 
   db.prepare(`
-    INSERT INTO projects (id, name, bpm, key, flavours, description, created_at, archived)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+    INSERT INTO projects (id, name, bpm, key, flavours, description, created_at, archived, cover_element_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, '')
   `).run(
-    id,
-    name.trim(),
-    bpm || '',
-    key || '',
+    id, name.trim(), bpm || '', key || '',
     JSON.stringify(Array.isArray(flavours) ? flavours : []),
-    description || '',
-    now,
+    description || '', now,
   );
 
-  const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
-  res.status(201).json({ ...row, flavours: JSON.parse(row.flavours), archived: false });
+  res.status(201).json(formatProject(db.prepare('SELECT * FROM projects WHERE id = ?').get(id)));
 });
 
 // ── PATCH /api/projects/:id ───────────────────────────────────────────────────
 router.patch('/:id', (req, res) => {
-  const db = getDb();
+  const db  = getDb();
   const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Project not found' });
 
-  const { name, bpm, key, flavours, description, archived } = req.body || {};
+  const { name, bpm, key, flavours, description, archived, coverElementId } = req.body || {};
 
   const updated = {
-    name:        name        !== undefined ? name.trim()                                     : row.name,
-    bpm:         bpm         !== undefined ? bpm                                              : row.bpm,
-    key:         key         !== undefined ? key                                              : row.key,
-    flavours:    flavours    !== undefined ? JSON.stringify(Array.isArray(flavours) ? flavours : []) : row.flavours,
-    description: description !== undefined ? description                                      : row.description,
-    archived:    archived    !== undefined ? (archived ? 1 : 0)                              : row.archived,
+    name:             name            !== undefined ? name.trim()                                              : row.name,
+    bpm:              bpm             !== undefined ? bpm                                                      : row.bpm,
+    key:              key             !== undefined ? key                                                      : row.key,
+    flavours:         flavours        !== undefined ? JSON.stringify(Array.isArray(flavours) ? flavours : [])  : row.flavours,
+    description:      description     !== undefined ? description                                              : row.description,
+    archived:         archived        !== undefined ? (archived ? 1 : 0)                                      : row.archived,
+    cover_element_id: coverElementId  !== undefined ? coverElementId                                          : (row.cover_element_id || ''),
   };
 
   if (!updated.name) return res.status(400).json({ error: 'name cannot be empty' });
 
   db.prepare(`
-    UPDATE projects SET name = ?, bpm = ?, key = ?, flavours = ?, description = ?, archived = ?
-    WHERE id = ?
-  `).run(updated.name, updated.bpm, updated.key, updated.flavours, updated.description, updated.archived, req.params.id);
+    UPDATE projects
+    SET name=?, bpm=?, key=?, flavours=?, description=?, archived=?, cover_element_id=?
+    WHERE id=?
+  `).run(
+    updated.name, updated.bpm, updated.key, updated.flavours,
+    updated.description, updated.archived, updated.cover_element_id,
+    req.params.id,
+  );
 
-  const out = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
-  res.json({ ...out, flavours: JSON.parse(out.flavours), archived: !!out.archived });
+  res.json(formatProject(db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id)));
 });
 
 // ── DELETE /api/projects/:id ──────────────────────────────────────────────────
-// Hard-deletes a project and all its elements + log entries.
-// Files on disk are NOT automatically removed here — that is handled by the
-// files route. This is intentional: deletion is a two-step process and the UI
-// should call the file cleanup endpoint first if needed.
 router.delete('/:id', (req, res) => {
-  const db = getDb();
+  const db  = getDb();
   const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Project not found' });
 
   const deleteAll = db.transaction(() => {
-    // Delete log entries for all elements in this project
     db.prepare(`
       DELETE FROM status_log WHERE element_id IN (
         SELECT id FROM elements WHERE project_id = ?

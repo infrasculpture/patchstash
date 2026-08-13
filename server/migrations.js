@@ -54,6 +54,8 @@ function runMigrations(db) {
       patch               TEXT NOT NULL DEFAULT '',
       tech                TEXT NOT NULL DEFAULT '',
 
+      external_link       TEXT NOT NULL DEFAULT '',
+
       primary_filename    TEXT NOT NULL DEFAULT '',
       primary_type        TEXT NOT NULL DEFAULT '',
       primary_size        INTEGER NOT NULL DEFAULT 0,
@@ -69,6 +71,14 @@ function runMigrations(db) {
       updated_at          TEXT NOT NULL
     );
   `);
+
+  // Safe additive migrations for columns added after initial release
+  // (ALTER TABLE ADD COLUMN is idempotent via the try/catch pattern)
+  const addColumnIfMissing = (table, column, definition) => {
+    try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`); } catch(_) {}
+  };
+  addColumnIfMissing('elements', 'external_link', `TEXT NOT NULL DEFAULT ''`);
+  addColumnIfMissing('projects', 'cover_element_id', `TEXT NOT NULL DEFAULT ''`);
 
   // ── Status log ────────────────────────────────────────────────────────────
   // Append-only. from_status and to_status are both nullable — a null pair

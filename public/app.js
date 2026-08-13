@@ -240,13 +240,18 @@ function statusBadgeHtml(status) {
 
 function sourceTypeLabel(v) {
   const map = {
-    'software-synth': 'Software Synth',
-    'hardware-synth': 'Hardware Synth',
-    'sample':         'Sample',
-    'field-recording':'Field Recording',
-    'plugin-chain':   'Plugin Chain',
-    'daw-project':    'DAW Project',
-    'other':          'Other',
+    'software-synth':       'Software Synth',
+    'hardware-synth':       'Hardware Synth',
+    'sample':               'Sample',
+    'stem':                 'Stem',
+    'field-recording':      'Field Recording',
+    'plugin-chain':         'Plugin Chain',
+    'daw-project':          'DAW Project',
+    'track-part':           'Track Part',
+    'track-unmastered':     'Track (Unmastered)',
+    'track-mastered':       'Track (Mastered)',
+    'image':                'Image',
+    'other':                'Other',
   };
   return map[v] || v || '';
 }
@@ -259,10 +264,6 @@ function processingLabel(v) {
     'stems':       'Stems',
   };
   return map[v] || v || '';
-}
-
-function energyLabel(v) {
-  return v ? v.charAt(0).toUpperCase() + v.slice(1) : '';
 }
 
 function fmtDate(iso) {
@@ -283,26 +284,24 @@ const COLOUR_PRESETS = [
 ];
 
 const SOURCE_TYPES = [
-  { value: 'software-synth',  label: 'Software Synth' },
-  { value: 'hardware-synth',  label: 'Hardware Synth' },
-  { value: 'sample',          label: 'Sample' },
-  { value: 'field-recording', label: 'Field Recording' },
-  { value: 'plugin-chain',    label: 'Plugin Chain' },
-  { value: 'daw-project',     label: 'DAW Project' },
-  { value: 'other',           label: 'Other' },
+  { value: 'software-synth',   label: 'Software Synth' },
+  { value: 'hardware-synth',   label: 'Hardware Synth' },
+  { value: 'sample',           label: 'Sample' },
+  { value: 'stem',             label: 'Stem' },
+  { value: 'field-recording',  label: 'Field Recording' },
+  { value: 'plugin-chain',     label: 'Plugin Chain' },
+  { value: 'daw-project',      label: 'DAW Project' },
+  { value: 'track-part',       label: 'Track Part' },
+  { value: 'track-unmastered', label: 'Track (Unmastered)' },
+  { value: 'track-mastered',   label: 'Track (Mastered)' },
+  { value: 'image',            label: 'Image' },
+  { value: 'other',            label: 'Other' },
 ];
 
 const PROCESSING_STATES = [
   { value: 'raw',         label: 'Raw — dry, minimal processing' },
   { value: 'processed',   label: 'Processed — treated but not finalised' },
   { value: 'print-ready', label: 'Print-ready — can drop straight in' },
-  { value: 'stems',       label: 'Stems — multiple layered components' },
-];
-
-const ENERGY_LEVELS = [
-  { value: 'low',  label: 'Low' },
-  { value: 'mid',  label: 'Mid' },
-  { value: 'high', label: 'High' },
 ];
 
 const VALID_STATUSES = [
@@ -645,8 +644,13 @@ async function renderProjectsList(includeArchived) {
     return;
   }
 
-  const projectCard = p => `
+  const projectCard = p => {
+    const coverUrl = p.coverElementId
+      ? `/api/elements/${p.coverElementId}/files/primary`
+      : null;
+    return `
     <div class="project-card" onclick="router.navigate('/projects/${p.id}')">
+      ${coverUrl ? `<div class="project-card-artwork" style="background-image:url('${coverUrl}')"></div>` : ''}
       <div class="project-card-name">${esc(p.name)}</div>
       <div class="project-card-meta">
         ${p.bpm ? `<span>${esc(p.bpm)} BPM</span>` : ''}
@@ -659,6 +663,7 @@ async function renderProjectsList(includeArchived) {
         <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditProjectModal('${p.id}')">Edit</button>
       </div>
     </div>`;
+  };
 
   let html = `<div class="projects-grid">${active.map(projectCard).join('')}</div>`;
 
@@ -810,7 +815,7 @@ async function confirmDeleteProject(id) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Active filter state for the current project view
-const filters = { status: '', layerId: '', sourceType: '', processingState: '', energyLevel: '' };
+const filters = { status: '', layerId: '', sourceType: '', processingState: '' };
 
 async function viewProject(queryParams, routeParams) {
   const { id } = routeParams;
@@ -828,14 +833,19 @@ async function viewProject(queryParams, routeParams) {
   setApp(`
     <div class="project-view-header">
       <div class="project-view-title-row">
-        <div>
-          <h1 class="page-title">${esc(project.name)}</h1>
-          <div class="project-view-meta">
-            ${project.bpm ? `<span>${esc(project.bpm)} BPM</span>` : ''}
-            ${project.key ? `<span>${esc(project.key)}</span>` : ''}
-            ${(project.flavours || []).map(f => `<span class="project-flavour-tag">${esc(f)}</span>`).join('')}
+        <div style="display:flex;align-items:flex-start;gap:1rem">
+          ${project.coverElementId
+            ? `<div class="project-header-artwork" style="background-image:url('/api/elements/${esc(project.coverElementId)}/files/primary')"></div>`
+            : ''}
+          <div>
+            <h1 class="page-title">${esc(project.name)}</h1>
+            <div class="project-view-meta">
+              ${project.bpm ? `<span>${esc(project.bpm)} BPM</span>` : ''}
+              ${project.key ? `<span>${esc(project.key)}</span>` : ''}
+              ${(project.flavours || []).map(f => `<span class="project-flavour-tag">${esc(f)}</span>`).join('')}
+            </div>
+            ${project.description ? `<p class="project-view-desc">${esc(project.description)}</p>` : ''}
           </div>
-          ${project.description ? `<p class="project-view-desc">${esc(project.description)}</p>` : ''}
         </div>
         <div class="page-header-actions">
           <button class="btn btn-ghost btn-sm" onclick="openEditProjectModal('${esc(id)}')">Edit project</button>
@@ -888,11 +898,6 @@ async function renderFilterBar(projectId) {
       ${filterBtn('processingState', '', 'All')}
       ${PROCESSING_STATES.map(s => filterBtn('processingState', s.value, s.label.split(' — ')[0])).join('')}
     </div>
-    <div class="filter-group">
-      <span class="filter-group-label">Energy</span>
-      ${filterBtn('energyLevel', '', 'All')}
-      ${ENERGY_LEVELS.map(s => filterBtn('energyLevel', s.value, s.label)).join('')}
-    </div>
   `;
 }
 
@@ -911,7 +916,6 @@ async function renderElements(projectId) {
   if (filters.layerId)         q.set('layerId',          filters.layerId);
   if (filters.sourceType)      q.set('sourceType',       filters.sourceType);
   if (filters.processingState) q.set('processingState',  filters.processingState);
-  if (filters.energyLevel)     q.set('energyLevel',      filters.energyLevel);
 
   const { data, error } = await api.elements(projectId, q.toString());
   if (error) { area.innerHTML = `<div class="alert alert-error">${esc(error)}</div>`; return; }
@@ -954,7 +958,6 @@ function elementCardHtml(el) {
       <div class="element-card-meta">
         ${el.sourceType      ? `<span class="meta-tag">${esc(sourceTypeLabel(el.sourceType))}</span>` : ''}
         ${el.processingState ? `<span class="meta-tag">${esc(processingLabel(el.processingState))}</span>` : ''}
-        ${el.energyLevel     ? `<span class="meta-tag">${esc(energyLabel(el.energyLevel))}</span>` : ''}
         ${el.bpm  || el.key  ? `<span class="meta-tag mono">${[el.bpm ? el.bpm + ' BPM' : '', el.key].filter(Boolean).join(' · ')}</span>` : ''}
       </div>
       <div class="element-card-footer">
@@ -1007,7 +1010,7 @@ async function viewNewElement(queryParams, routeParams) {
 
         <div class="field-row">
           <div class="field">
-            <label for="el-layer">Layer *</label>
+            <label for="el-layer">Layer</label>
             <select id="el-layer">
               <option value="">— select layer —</option>
               ${activeLayers.map(l =>
@@ -1024,21 +1027,12 @@ async function viewNewElement(queryParams, routeParams) {
           </div>
         </div>
 
-        <div class="field-row">
-          <div class="field">
-            <label for="el-processing">Processing state</label>
-            <select id="el-processing">
-              <option value="">— select —</option>
-              ${PROCESSING_STATES.map(s => `<option value="${esc(s.value)}">${esc(s.label)}</option>`).join('')}
-            </select>
-          </div>
-          <div class="field">
-            <label for="el-energy">Energy level</label>
-            <select id="el-energy">
-              <option value="">— select —</option>
-              ${ENERGY_LEVELS.map(s => `<option value="${esc(s.value)}">${esc(s.label)}</option>`).join('')}
-            </select>
-          </div>
+        <div class="field">
+          <label for="el-processing">Processing state</label>
+          <select id="el-processing">
+            <option value="">— select —</option>
+            ${PROCESSING_STATES.map(s => `<option value="${esc(s.value)}">${esc(s.label)}</option>`).join('')}
+          </select>
         </div>
 
         <div class="field-row">
@@ -1050,6 +1044,12 @@ async function viewNewElement(queryParams, routeParams) {
             <label for="el-key">Key</label>
             <input type="text" id="el-key" placeholder="${esc(project.key || 'inherited from project')}" maxlength="30">
           </div>
+        </div>
+
+        <div class="field">
+          <label for="el-external-link">External file link (optional)</label>
+          <input type="url" id="el-external-link" placeholder="https://… e.g. Cloudflare R2, Proton Drive, Google Drive share link">
+          <p class="field-hint">Use this when the file lives in cloud storage rather than being uploaded directly.</p>
         </div>
       </div>
 
@@ -1113,13 +1113,13 @@ async function submitNewElement(projectId) {
     layerId:         document.getElementById('el-layer').value,
     sourceType:      document.getElementById('el-source').value,
     processingState: document.getElementById('el-processing').value,
-    energyLevel:     document.getElementById('el-energy').value,
     bpm:             document.getElementById('el-bpm').value.trim(),
     key:             document.getElementById('el-key').value.trim(),
     synth:           document.getElementById('el-synth').value.trim(),
     patch:           document.getElementById('el-patch').value.trim(),
     bank:            document.getElementById('el-bank').value.trim(),
     tech:            document.getElementById('el-tech').value.trim(),
+    externalLink:    document.getElementById('el-external-link').value.trim(),
     submittedBy:     author,
   });
 
@@ -1162,14 +1162,13 @@ async function viewElement(queryParams, routeParams) {
         <div class="element-detail-meta">
           ${el.sourceType      ? `<span>${esc(sourceTypeLabel(el.sourceType))}</span>` : ''}
           ${el.processingState ? `<span>${esc(processingLabel(el.processingState))}</span>` : ''}
-          ${el.energyLevel     ? `<span>${esc(energyLabel(el.energyLevel))} energy</span>` : ''}
           ${el.bpm || el.key   ? `<span class="mono">${[el.bpm ? el.bpm + ' BPM' : '', el.key].filter(Boolean).join(' · ')}</span>` : ''}
           <span class="muted">${el.submittedBy ? esc(el.submittedBy) + ' · ' : ''}${fmtDate(el.createdAt)}</span>
         </div>
       </div>
       <div class="page-header-actions">
         <button class="btn btn-ghost btn-sm" onclick="router.navigate('/projects/${esc(el.projectId)}')">← Back</button>
-        <button class="btn btn-secondary btn-sm" onclick="openEditElementModal('${esc(id)}')">Edit</button>
+        <button class="btn btn-secondary btn-sm" onclick="openEditElementModal('${esc(id)}','${esc(el.projectId)}')">Edit</button>
         <button class="btn btn-danger btn-sm" onclick="confirmDeleteElement('${esc(id)}','${esc(el.projectId)}')">Delete</button>
       </div>
     </div>
@@ -1197,6 +1196,17 @@ async function viewElement(queryParams, routeParams) {
               ${el.bank  ? `<div class="detail-field"><span class="detail-field-label">Bank</span><span class="detail-field-value mono">${esc(el.bank)}</span></div>` : ''}
             </div>
             ${el.tech ? `<div style="margin-top:0.75rem"><div class="label" style="margin-bottom:0.35rem">Technique notes</div><p style="font-size:0.875rem;line-height:1.7;color:var(--t2)">${esc(el.tech)}</p></div>` : ''}
+          </div>
+        </div>` : ''}
+
+        ${el.externalLink ? `
+        <div class="card" style="margin-bottom:1rem">
+          <div class="card-body">
+            <div class="label" style="margin-bottom:0.5rem">External file link</div>
+            <a href="${esc(el.externalLink)}" target="_blank" rel="noopener noreferrer"
+               class="external-link-display">
+              ↗ ${esc(el.externalLink)}
+            </a>
           </div>
         </div>` : ''}
 
@@ -1451,9 +1461,13 @@ async function deleteFileSlot(elementId, slot) {
 
 // ── Edit element modal ────────────────────────────────────────────────────────
 
-async function openEditElementModal(id) {
+async function openEditElementModal(id, projectId) {
   const { data: el, error } = await api.getElement(id);
   if (error) { toast.error(error); return; }
+
+  // Determine if this element is currently the project cover artwork
+  const proj = state.currentProject;
+  const isCoverArtwork = proj && proj.coverElementId === id;
 
   const activeLayers = state.layers.filter(l => !l.archived);
 
@@ -1478,7 +1492,7 @@ async function openEditElementModal(id) {
       </div>
       <div class="field">
         <label for="eel-source">Source type</label>
-        <select id="eel-source">
+        <select id="eel-source" onchange="toggleCoverArtworkOption(this.value,'${esc(projectId)}','${esc(id)}')">
           <option value="">— none —</option>
           ${SOURCE_TYPES.map(s =>
             `<option value="${esc(s.value)}" ${el.sourceType === s.value ? 'selected' : ''}>${esc(s.label)}</option>`
@@ -1486,25 +1500,14 @@ async function openEditElementModal(id) {
         </select>
       </div>
     </div>
-    <div class="field-row">
-      <div class="field">
-        <label for="eel-processing">Processing state</label>
-        <select id="eel-processing">
-          <option value="">— none —</option>
-          ${PROCESSING_STATES.map(s =>
-            `<option value="${esc(s.value)}" ${el.processingState === s.value ? 'selected' : ''}>${esc(s.label.split(' — ')[0])}</option>`
-          ).join('')}
-        </select>
-      </div>
-      <div class="field">
-        <label for="eel-energy">Energy level</label>
-        <select id="eel-energy">
-          <option value="">— none —</option>
-          ${ENERGY_LEVELS.map(s =>
-            `<option value="${esc(s.value)}" ${el.energyLevel === s.value ? 'selected' : ''}>${esc(s.label)}</option>`
-          ).join('')}
-        </select>
-      </div>
+    <div class="field">
+      <label for="eel-processing">Processing state</label>
+      <select id="eel-processing">
+        <option value="">— none —</option>
+        ${PROCESSING_STATES.map(s =>
+          `<option value="${esc(s.value)}" ${el.processingState === s.value ? 'selected' : ''}>${esc(s.label.split(' — ')[0])}</option>`
+        ).join('')}
+      </select>
     </div>
     <div class="field-row">
       <div class="field">
@@ -1533,13 +1536,30 @@ async function openEditElementModal(id) {
     <div class="field">
       <label for="eel-tech">Technique notes</label>
       <textarea id="eel-tech" rows="2">${esc(el.tech)}</textarea>
+    </div>
+    <div class="field">
+      <label for="eel-external-link">External file link</label>
+      <input type="url" id="eel-external-link" value="${esc(el.externalLink || '')}" placeholder="https://…">
+    </div>
+    <div id="cover-artwork-wrap" style="display:${el.sourceType === 'image' ? '' : 'none'}">
+      <div class="divider"></div>
+      <label style="display:flex;align-items:center;gap:0.6rem;cursor:pointer;font-size:0.9rem">
+        <input type="checkbox" id="eel-cover-artwork" ${isCoverArtwork ? 'checked' : ''}>
+        <span>Use as project cover artwork</span>
+      </label>
+      <p class="hint" style="margin-top:0.25rem;margin-left:1.6rem">Displays this image on the project card and project header.</p>
     </div>`,
     `<button class="btn btn-secondary" onclick="modal.close()">Cancel</button>
-     <button class="btn btn-primary" onclick="submitEditElement('${esc(id)}')">Save changes</button>`
+     <button class="btn btn-primary" onclick="submitEditElement('${esc(id)}','${esc(projectId)}')">Save changes</button>`
   );
 }
 
-async function submitEditElement(id) {
+function toggleCoverArtworkOption(sourceType) {
+  const wrap = document.getElementById('cover-artwork-wrap');
+  if (wrap) wrap.style.display = sourceType === 'image' ? '' : 'none';
+}
+
+async function submitEditElement(id, projectId) {
   const title = document.getElementById('eel-title').value.trim();
   if (!title) { toast.error('Title is required.'); return; }
 
@@ -1549,16 +1569,40 @@ async function submitEditElement(id) {
     layerId:         document.getElementById('eel-layer').value,
     sourceType:      document.getElementById('eel-source').value,
     processingState: document.getElementById('eel-processing').value,
-    energyLevel:     document.getElementById('eel-energy').value,
     bpm:             document.getElementById('eel-bpm').value.trim(),
     key:             document.getElementById('eel-key').value.trim(),
     synth:           document.getElementById('eel-synth').value.trim(),
     patch:           document.getElementById('eel-patch').value.trim(),
     bank:            document.getElementById('eel-bank').value.trim(),
     tech:            document.getElementById('eel-tech').value.trim(),
+    externalLink:    document.getElementById('eel-external-link').value.trim(),
   });
-
   if (error) { toast.error(error); return; }
+
+  // Handle cover artwork promotion / demotion
+  const coverCheckbox = document.getElementById('eel-cover-artwork');
+  if (coverCheckbox) {
+    const pid = projectId || (state.currentProject && state.currentProject.id);
+    if (pid) {
+      const { data: proj } = await api.getProject(pid);
+      if (proj) {
+        const wantsCover     = coverCheckbox.checked;
+        const isCurrentCover = proj.coverElementId === id;
+        if (wantsCover && !isCurrentCover) {
+          await api.updateProject(pid, { coverElementId: id });
+          if (state.currentProject && state.currentProject.id === pid) {
+            state.currentProject.coverElementId = id;
+          }
+        } else if (!wantsCover && isCurrentCover) {
+          await api.updateProject(pid, { coverElementId: '' });
+          if (state.currentProject && state.currentProject.id === pid) {
+            state.currentProject.coverElementId = '';
+          }
+        }
+      }
+    }
+  }
+
   modal.close();
   toast.success('Element updated.');
   await viewElement(new URLSearchParams(), { id });
@@ -1571,10 +1615,6 @@ async function confirmDeleteElement(id, projectId) {
   toast.success('Element deleted.');
   router.navigate(`/projects/${projectId}`);
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-//  ROUTER REGISTRATION
-// ═══════════════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  EXPORT VIEW  — select elements, map custom layers, download PA JSON

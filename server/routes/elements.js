@@ -38,6 +38,7 @@ function formatElement(row) {
       sizeBytes:  row.audio_size,
       uploadedAt: row.audio_uploaded_at,
     } : null,
+    externalLink: row.external_link || '',
     status:      row.status,
     submittedBy: row.submitted_by,
     createdAt:   row.created_at,
@@ -106,8 +107,8 @@ router.post('/projects/:projectId/elements', (req, res) => {
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
   const {
-    title, description, layerId, sourceType, processingState, energyLevel,
-    bpm, key, synth, bank, patch, tech, submittedBy,
+    title, description, layerId, sourceType, processingState,
+    bpm, key, synth, bank, patch, tech, submittedBy, externalLink,
   } = req.body || {};
 
   if (!title || !title.trim()) {
@@ -120,23 +121,24 @@ router.post('/projects/:projectId/elements', (req, res) => {
   db.prepare(`
     INSERT INTO elements (
       id, project_id, title, description,
-      layer_id, source_type, processing_state, energy_level,
-      bpm, key, synth, bank, patch, tech,
+      layer_id, source_type, processing_state,
+      bpm, key, synth, bank, patch, tech, external_link,
       primary_filename, primary_type, primary_size, primary_uploaded_at,
       audio_filename, audio_size, audio_uploaded_at,
       status, submitted_by, created_at, updated_at
     ) VALUES (
       ?, ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?, ?, ?, ?, ?,
+      ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?,
       '', '', 0, '',
       '', 0, '',
       'new', ?, ?, ?
     )
   `).run(
     id, req.params.projectId, title.trim(), description || '',
-    layerId || '', sourceType || '', processingState || '', energyLevel || '',
+    layerId || '', sourceType || '', processingState || '',
     bpm || '', key || '', synth || '', bank || '', patch || '', tech || '',
+    externalLink || '',
     submittedBy || '', now, now,
   );
 
@@ -153,14 +155,14 @@ router.patch('/elements/:id', (req, res) => {
 
   const fields = [
     'title', 'description', 'layerId', 'sourceType', 'processingState',
-    'energyLevel', 'bpm', 'key', 'synth', 'bank', 'patch', 'tech', 'submittedBy',
+    'bpm', 'key', 'synth', 'bank', 'patch', 'tech', 'submittedBy', 'externalLink',
   ];
   const columnMap = {
     title: 'title', description: 'description', layerId: 'layer_id',
     sourceType: 'source_type', processingState: 'processing_state',
-    energyLevel: 'energy_level', bpm: 'bpm', key: 'key',
+    bpm: 'bpm', key: 'key',
     synth: 'synth', bank: 'bank', patch: 'patch', tech: 'tech',
-    submittedBy: 'submitted_by',
+    submittedBy: 'submitted_by', externalLink: 'external_link',
   };
 
   const setClauses = [];
