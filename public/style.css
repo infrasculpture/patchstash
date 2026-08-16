@@ -849,7 +849,7 @@ input[type=color] {
 
 .element-detail-grid {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 3fr 2fr; /* Or 1fr 1fr for equal width, 2fr 3fr to give right column maximum space */
   gap: 1rem;
   align-items: flex-start;
 }
