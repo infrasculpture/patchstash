@@ -135,6 +135,12 @@ const router = {
 
 // ── Shell ─────────────────────────────────────────────────────────────────────
 
+function setMainWidth(cls) {
+  const m = document.getElementById('main-area');
+  if (!m) return;
+  m.className = 'main' + (cls ? ' ' + cls : '');
+}
+
 function setApp(html) {
   document.getElementById('app').innerHTML = html;
 }
@@ -378,6 +384,7 @@ async function loadLayers() {
 
 async function viewLayers() {
   updateTopnav();
+  setMainWidth('constrained');
   setApp(`
     <div class="page-header">
       <div class="page-header-left">
@@ -611,6 +618,8 @@ async function submitDeleteLayer(id) {
 async function viewProjects() {
   state.currentProject = null;
   updateTopnav();
+  setMainWidth('full-width');
+  setMainWidth('full-width');
   setApp(`<div class="page-header">
     <div class="page-header-left">
       <h1 class="page-title">Projects</h1>
@@ -984,6 +993,7 @@ async function viewNewElement(queryParams, routeParams) {
 
   state.currentProject = project;
   updateTopnav();
+  setMainWidth('constrained');
 
   const activeLayers = state.layers.filter(l => !l.archived);
 
@@ -1640,6 +1650,7 @@ async function viewExport(queryParams, routeParams) {
 
   state.currentProject = project;
   updateTopnav();
+  setMainWidth('constrained');
 
   // Load all elements for this project — filter to exportable statuses
   const { data: allElements, error: eErr } = await api.elements(projectId);
