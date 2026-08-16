@@ -836,6 +836,9 @@ async function viewProject(queryParams, routeParams) {
   state.currentProject = project;
   updateTopnav();
 
+  // Set main container to full width
+  setMainWidth('full-width');
+
   // Reset filters when entering a project
   Object.keys(filters).forEach(k => filters[k] = '');
 
@@ -1144,6 +1147,9 @@ async function submitNewElement(projectId) {
 
 async function viewElement(queryParams, routeParams) {
   const { id } = routeParams;
+
+  // Set main container to full width for element detail view
+  setMainWidth('full-width');
 
   const [elRes, logRes] = await Promise.all([api.getElement(id), api.getLog(id)]);
   if (elRes.error) { toast.error('Element not found.'); history.back(); return; }
