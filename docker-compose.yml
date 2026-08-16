@@ -14,7 +14,7 @@ services:
     restart: unless-stopped
     # Healthcheck: Docker will restart the container if the server stops responding
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/auth"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/auth"]
       interval: 30s
       timeout: 5s
       retries: 3
