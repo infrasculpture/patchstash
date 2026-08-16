@@ -5,12 +5,13 @@ services:
     # image: ghcr.io/yourname/patchstash:latest
     ports:
       - "${PORT:-3000}:3000"
-    volumes:
-      # Host path on the left, container path on the right.
-      # Change the left side to wherever you want data stored on the host.
-      - ${DATA_DIR:-./data}:/app/data
     env_file:
       - .env
+    environment:
+      - DATA_DIR=/app/data
+      - DB_PATH=/app/data/patchstash.db
+    volumes:
+      - ${DATA_DIR:-./data}:/app/data
     restart: unless-stopped
     # Healthcheck: Docker will restart the container if the server stops responding
     healthcheck:
