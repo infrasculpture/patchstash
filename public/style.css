@@ -734,7 +734,7 @@ input[type=color] {
 
 .element-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));  /* was 260px */
   gap: 0.75rem;
   align-items: start;
 }
@@ -749,7 +749,7 @@ input[type=color] {
   box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
-  height: 190px;        /* fixed height so grid rows align cleanly */
+  height: 225px;        /* was 190px — room for a wrapped badge row */
 }
 .element-card:hover {
   border-color: var(--accent);
@@ -1075,7 +1075,7 @@ code {
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 860px) {
   .element-detail-grid { grid-template-columns: 1fr; }
-  .element-list { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .element-list { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }  /* was 220px */
 }
 
 @media (max-width: 600px) {
@@ -1090,5 +1090,5 @@ code {
   .filter-group-label { width: 100%; }
   .element-detail-grid { grid-template-columns: 1fr; }
   .element-list { grid-template-columns: 1fr 1fr; }
-  .element-card { height: auto; min-height: 160px; }
+  .element-card { height: auto; min-height: 190px; }  /* was 160px */
 }
