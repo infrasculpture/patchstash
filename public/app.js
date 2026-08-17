@@ -61,6 +61,7 @@ const api = {
   deleteElement: (id)       => api.delete(`/api/elements/${id}`),
   setStatus:     (id, body) => api.post(`/api/elements/${id}/status`, body),
   getLog:        (id)       => api.get(`/api/elements/${id}/log`),
+  moveElement:   (id, body) => api.post(`/api/elements/${id}/move`, body),
 
   uploadFile:   (id, slot, form) => api.upload(`/api/elements/${id}/files/${slot}`, form),
   deleteFile:   (id, slot)       => api.delete(`/api/elements/${id}/files/${slot}`),
@@ -836,9 +837,6 @@ async function viewProject(queryParams, routeParams) {
   state.currentProject = project;
   updateTopnav();
 
-  // Set main container to full width
-  setMainWidth('full-width');
-
   // Reset filters when entering a project
   Object.keys(filters).forEach(k => filters[k] = '');
 
@@ -1148,9 +1146,6 @@ async function submitNewElement(projectId) {
 async function viewElement(queryParams, routeParams) {
   const { id } = routeParams;
 
-  // Set main container to full width for element detail view
-  setMainWidth('full-width');
-
   const [elRes, logRes] = await Promise.all([api.getElement(id), api.getLog(id)]);
   if (elRes.error) { toast.error('Element not found.'); history.back(); return; }
 
@@ -1184,6 +1179,7 @@ async function viewElement(queryParams, routeParams) {
       </div>
       <div class="page-header-actions">
         <button class="btn btn-ghost btn-sm" onclick="router.navigate('/projects/${esc(el.projectId)}')">← Back</button>
+        <button class="btn btn-secondary btn-sm" onclick="openMoveElementModal('${esc(id)}','${esc(el.projectId)}','${esc(el.bpm)}','${esc(el.key)}')">Move to project…</button>
         <button class="btn btn-secondary btn-sm" onclick="openEditElementModal('${esc(id)}','${esc(el.projectId)}')">Edit</button>
         <button class="btn btn-danger btn-sm" onclick="confirmDeleteElement('${esc(id)}','${esc(el.projectId)}')">Delete</button>
       </div>
@@ -1630,6 +1626,89 @@ async function confirmDeleteElement(id, projectId) {
   if (error) { toast.error(error); return; }
   toast.success('Element deleted.');
   router.navigate(`/projects/${projectId}`);
+}
+
+// ── Move element to another project ───────────────────────────────────────────
+// Built for the "coffee shop capture" workflow: an idea recorded with no fixed
+// home yet, later relocated into whichever project it ends up suiting. Moves
+// the database row and the files directory together; description, layer,
+// source type, processing state, and log history all travel with it untouched.
+
+async function openMoveElementModal(elementId, currentProjectId, currentBpm, currentKey) {
+  const { data: projects, error } = await api.projects(false);
+  if (error) { toast.error(error); return; }
+
+  const candidates = projects.filter(p => p.id !== currentProjectId);
+  if (!candidates.length) {
+    toast.error('No other active projects to move this element to.');
+    return;
+  }
+
+  const projectOptions = candidates.map(p =>
+    `<option value="${esc(p.id)}" data-bpm="${esc(p.bpm)}" data-key="${esc(p.key)}">${esc(p.name)}</option>`
+  ).join('');
+
+  modal.open('Move element to another project',
+    `<div class="field">
+      <label for="move-target-project">Target project</label>
+      <select id="move-target-project" onchange="onMoveTargetChange()">
+        ${projectOptions}
+      </select>
+    </div>
+    <div class="field">
+      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer">
+        <input type="checkbox" id="move-apply-defaults" checked onchange="onMoveTargetChange()">
+        Apply target project's BPM / Key defaults
+      </label>
+      <p class="field-hint">Uncheck to keep this element's current BPM/Key instead.</p>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="move-bpm">BPM</label>
+        <input type="number" id="move-bpm" value="${esc(currentBpm)}" min="60" max="250">
+      </div>
+      <div class="field">
+        <label for="move-key">Key</label>
+        <input type="text" id="move-key" value="${esc(currentKey)}" maxlength="30">
+      </div>
+    </div>
+    <p class="hint">Files, description, layer, source type, and log history all move with the element.</p>`,
+    `<button class="btn btn-secondary" onclick="modal.close()">Cancel</button>
+     <button class="btn btn-primary" id="move-confirm-btn" onclick="submitMoveElement('${esc(elementId)}')">Move element</button>`
+  );
+
+  // Seed BPM/Key from the pre-selected (first) target project, since the
+  // "apply defaults" checkbox starts checked.
+  onMoveTargetChange();
+}
+
+function onMoveTargetChange() {
+  const checkbox = document.getElementById('move-apply-defaults');
+  if (!checkbox || !checkbox.checked) return;
+  const sel = document.getElementById('move-target-project');
+  const opt = sel.options[sel.selectedIndex];
+  document.getElementById('move-bpm').value = opt.dataset.bpm || '';
+  document.getElementById('move-key').value = opt.dataset.key || '';
+}
+
+async function submitMoveElement(elementId) {
+  const targetProjectId = document.getElementById('move-target-project').value;
+  const bpm = document.getElementById('move-bpm').value.trim();
+  const key = document.getElementById('move-key').value.trim();
+
+  const btn = document.getElementById('move-confirm-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Moving…'; }
+
+  const { error } = await api.moveElement(elementId, { targetProjectId, bpm, key });
+  if (error) {
+    toast.error(error);
+    if (btn) { btn.disabled = false; btn.textContent = 'Move element'; }
+    return;
+  }
+
+  modal.close();
+  toast.success('Element moved.');
+  router.navigate(`/elements/${elementId}`, true);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

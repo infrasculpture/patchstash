@@ -1,8 +1,10 @@
 'use strict';
 
 const express = require('express');
+const path    = require('path');
+const fs      = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { getDb } = require('../db');
+const { getDb, DATA_DIR } = require('../db');
 
 const router = express.Router();
 
@@ -44,6 +46,12 @@ function formatElement(row) {
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
   };
+}
+
+// Directory on the host volume where an element's files live.
+// Matches the layout used by routes/files.js exactly — {DATA_DIR}/files/{projectId}/{elementId}
+function elementDir(projectId, elementId) {
+  return path.join(DATA_DIR, 'files', projectId, elementId);
 }
 
 // ── GET /api/projects/:projectId/elements ─────────────────────────────────────
@@ -243,6 +251,90 @@ router.post('/elements/:id/status', (req, res) => {
       'SELECT * FROM status_log WHERE element_id = ? ORDER BY created_at DESC LIMIT 1'
     ).get(req.params.id),
   });
+});
+
+// ── POST /api/elements/:id/move ───────────────────────────────────────────────
+// Moves an element into a different project — reassigns project_id, relocates
+// its files directory on the host volume, clears it as the old project's cover
+// artwork if applicable, and (optionally) applies new BPM/Key values supplied
+// by the caller. The element's status and log history travel with it unchanged;
+// a freestanding log note records the move itself.
+//
+// Built for the "coffee shop capture" workflow described in the project brief:
+// elements start in a general capture project with no fixed home, and later get
+// moved into whichever real project they end up suiting — without re-uploading
+// files or re-typing metadata.
+router.post('/elements/:id/move', (req, res) => {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM elements WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Element not found' });
+
+  const { targetProjectId, bpm, key } = req.body || {};
+  if (!targetProjectId) {
+    return res.status(400).json({ error: 'targetProjectId is required' });
+  }
+  if (targetProjectId === row.project_id) {
+    return res.status(400).json({ error: 'Element is already in this project' });
+  }
+
+  const targetProject = db.prepare('SELECT * FROM projects WHERE id = ?').get(targetProjectId);
+  if (!targetProject) return res.status(404).json({ error: 'Target project not found' });
+
+  const sourceProject = db.prepare('SELECT * FROM projects WHERE id = ?').get(row.project_id);
+
+  // Relocate the files directory on the host volume, if the element has one.
+  // Uses rename (fast, same-volume move) with a copy+delete fallback in case
+  // the data directory ever spans a filesystem boundary that disallows rename.
+  const oldDir = elementDir(row.project_id, req.params.id);
+  const newDir = elementDir(targetProjectId, req.params.id);
+
+  if (fs.existsSync(oldDir)) {
+    fs.mkdirSync(path.join(DATA_DIR, 'files', targetProjectId), { recursive: true });
+    try {
+      fs.renameSync(oldDir, newDir);
+    } catch (err) {
+      fs.cpSync(oldDir, newDir, { recursive: true });
+      fs.rmSync(oldDir, { recursive: true, force: true });
+    }
+  }
+
+  const now = new Date().toISOString();
+
+  const move = db.transaction(() => {
+    db.prepare(`
+      UPDATE elements
+      SET project_id = ?, bpm = ?, key = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      targetProjectId,
+      bpm !== undefined ? bpm : row.bpm,
+      key !== undefined ? key : row.key,
+      now,
+      req.params.id,
+    );
+
+    // If this element was the source project's cover artwork, clear that
+    // reference — the file (and the element) no longer lives there.
+    db.prepare(
+      `UPDATE projects SET cover_element_id = '' WHERE id = ? AND cover_element_id = ?`
+    ).run(row.project_id, req.params.id);
+
+    // Freestanding log note recording the move — no status change, so
+    // from_status/to_status stay null per the existing log convention.
+    db.prepare(`
+      INSERT INTO status_log (id, element_id, from_status, to_status, comment, author, created_at)
+      VALUES (?, ?, NULL, NULL, ?, '', ?)
+    `).run(
+      uuidv4(),
+      req.params.id,
+      `Moved from "${sourceProject ? sourceProject.name : 'a previous project'}" to "${targetProject.name}".`,
+      now,
+    );
+  });
+  move();
+
+  const updated = db.prepare('SELECT * FROM elements WHERE id = ?').get(req.params.id);
+  res.json(formatElement(updated));
 });
 
 // ── DELETE /api/elements/:id ──────────────────────────────────────────────────
